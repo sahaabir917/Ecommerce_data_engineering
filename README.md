@@ -4,11 +4,15 @@ Over the past few months, I worked on a data engineering project that combined a
 
 Here's what the pipeline looks like:
 
-📥 Data Ingestion - Extracted 185K+ records from two sources: internal systems and Google Drive sales invoices. Using n8n, I automated the extraction and parsing of relevant invoice data, leveraging Groq AI for intelligent document processing, then staged everything in Google Sheets before uploading to AWS S3.
+# 📥 Data Ingestion
+
+Extracted 185K+ records from two sources: internal systems and Google Drive sales invoices. Using n8n, I automated the extraction and parsing of relevant invoice data, leveraging Groq AI for intelligent document processing, then staged everything in Google Sheets before uploading to AWS S3.
 
 ![alt text](image-1.png)
 
-🏗️ Medallion Architecture on Databricks - Built a full Bronze - Silver - Gold Delta Lake pipeline using Databricks Jobs & Workflows:
+# 🏗️ Medallion Architecture on Databricks
+
+Built a full Bronze - Silver - Gold Delta Lake pipeline using Databricks Jobs & Workflows:
 • Retrieve data from AWS S3
 • Bronze: raw ingestion from both sources
 • Silver: cleaned, validated, and joined datasets
@@ -16,18 +20,26 @@ Here's what the pipeline looks like:
 
 ![alt text](image.png)
 
-📊 BI Dashboard — Developed a comprehensive dashboard on $1.79B in sales data, surfacing:
+# 📊 BI Dashboard
+
+Developed a comprehensive dashboard on $1.79B in sales data, surfacing:
 • Revenue trends over time
 • Discount impact analysis
 • Peak hour & seasonal patterns
 • Product-level performance metrics
 
-The results?
+![alt text](image-2.png)
+
+![alt text](image-3.png)
+
+![alt text](image-4.png)
+
+# The results?
 
 1. 50% reduction in manual data entry
 2. ~20% improvement in decision-making speed across sales teams
 
-Here's a live demonstration of the end-to-end pipeline I built - from raw invoices to $1.79B in sales insights👇
+# Here's a live demonstration of the end-to-end pipeline I built - from raw invoices to $1.79B in sales insights👇
 
 Linkedin Post: https://www.linkedin.com/posts/abir-saha-418a141b9_dataengineering-databricks-deltalake-ugcPost-7451158601550704640-cw9f?utm_source=share&utm_medium=member_desktop&rcm=ACoAADLftlQB_VBmiGM0XPHgvh4ApjEH6CjeK74
 
