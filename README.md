@@ -1,17 +1,36 @@
-# Ecommerce_data_engineering
+Built an End-to-End AI-Powered Data Pipeline on Databricks — from Raw Invoices to $1.79B in Sales Insights
 
-This project shows an end-to-end data engineering pipeline using a large eCommerce dataset, moving from Bronze, Silver, and Gold layers. It focuses on data cleaning, transformation, and basic data modeling, which are important steps in real-world data engineering.
+Over the past few months, I worked on a data engineering project that combined automation, AI, and cloud infrastructure to turn raw, multi-source sales data into actionable business intelligence.
 
-The project uses Apache Spark with PySpark to handle large-scale data efficiently. It also uses Delta Lake and SQL for data processing, storage, and analysis. The pipeline includes common data engineering tasks such as ETL (Extract, Transform, Load), data validation, and performance optimization.
+Here's what the pipeline looks like:
 
-In this project, I follow an Agentic AI workflow using GitHub Copilot and Claude. Instead of writing everything manually, I first build one table (for example, a base table) to define the structure and logic. Then, I use prompt engineering to generate other tables with the same pattern and structure.
+📥 Data Ingestion - Extracted 185K+ records from two sources: internal systems and Google Drive sales invoices. Using n8n, I automated the extraction and parsing of relevant invoice data, leveraging Groq AI for intelligent document processing, then staged everything in Google Sheets before uploading to AWS S3.
 
-The workflow I follow is:
+![alt text](image-1.png)
 
-Create an issue to define the task
-Make a clear plan for implementation
-Implement the plan using GitHub Copilot / Claude
+🏗️ Medallion Architecture on Databricks - Built a full Bronze - Silver - Gold Delta Lake pipeline using Databricks Jobs & Workflows:
+• Retrieve data from AWS S3
+• Bronze: raw ingestion from both sources
+• Silver: cleaned, validated, and joined datasets
+• Gold: analytics-ready views powering downstream BI
 
-I use this approach to make the development process more organized and faster. It helps me reuse logic, reduce repetitive work, and maintain consistency across multiple tables. This also improves productivity and shows how AI tools can support real-world development.
+![alt text](image.png)
 
-Overall, this project demonstrates how PySpark and AI tools can be combined to build scalable data pipelines, process large datasets, and complete projects more efficiently.
+📊 BI Dashboard — Developed a comprehensive dashboard on $1.79B in sales data, surfacing:
+• Revenue trends over time
+• Discount impact analysis
+• Peak hour & seasonal patterns
+• Product-level performance metrics
+
+The results?
+
+1. 50% reduction in manual data entry
+2. ~20% improvement in decision-making speed across sales teams
+
+Here's a live demonstration of the end-to-end pipeline I built - from raw invoices to $1.79B in sales insights👇
+
+Linkedin Post: https://www.linkedin.com/posts/abir-saha-418a141b9_dataengineering-databricks-deltalake-ugcPost-7451158601550704640-cw9f?utm_source=share&utm_medium=member_desktop&rcm=ACoAADLftlQB_VBmiGM0XPHgvh4ApjEH6CjeK74
+
+This project reinforced how much value you can unlock when solid data engineering meets intelligent automation. Happy to connect with others working in the data/AI pipeline space.
+
+hashtag#DataEngineering hashtag#Databricks hashtag#DeltaLake hashtag#n8n hashtag#AWS hashtag#BI hashtag#MedallionArchitecture hashtag#GroqAI hashtag#DataPipeline hashtag#Analytics
