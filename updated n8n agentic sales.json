@@ -1,0 +1,1735 @@
+{
+  "name": "Extract Invoice Fields from Google Drive PDFs",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1jD1ZFt7sTEYfaSbgxLqEM1apMqTTAHY-",
+          "mode": "list",
+          "cachedResultName": "Kaggle data",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1jD1ZFt7sTEYfaSbgxLqEM1apMqTTAHY-"
+        },
+        "event": "fileUpdated",
+        "options": {}
+      },
+      "id": "ee4bbe0c-d985-41c4-a159-e7af70d7ffb6",
+      "name": "New File in Google Drive",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [7248, 1856],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-pdf",
+              "leftValue": "={{ $json.name || $json.title || '' }}",
+              "rightValue": ".pdf",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            },
+            {
+              "id": "01e72beb-cea0-498b-8320-9383e8a41741",
+              "leftValue": "={{ $json.name || $json.title || '' }}",
+              "rightValue": ".PDF",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "0afee8cf-07d0-4eea-9197-aba056f10aab",
+      "name": "Is PDF or Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [7456, 1904]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "ad90c0b5-cd33-415c-941a-4927de1ef1e3",
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [7696, 1712],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "id": "388b2ee8-3824-4e67-a108-591b14237a56",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [7920, 1712],
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "b5f5fc1e-cc3d-4317-a2d1-f37940d5c584",
+      "name": "Download Image",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [7696, 2000],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst base64Image = binaryData.toString('base64');\nreturn [{ json: { imageBase64: base64Image } }];"
+      },
+      "id": "c005add6-2fee-4b68-bee9-c6a27948be43",
+      "name": "Convert Image to Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7920, 2000]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vision.googleapis.com/v1/images:annotate?key=Your_OWN_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"requests\": [{\n    \"image\": { \"content\": \"{{ $json.imageBase64 }}\" },\n    \"features\": [{ \"type\": \"DOCUMENT_TEXT_DETECTION\" }]\n  }]\n}",
+        "options": {}
+      },
+      "id": "81fa69a4-54d0-48ae-a677-70cdc2872045",
+      "name": "Google Cloud Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [8144, 2000]
+    },
+    {
+      "parameters": {
+        "jsCode": "const responses = $input.first().json.responses;\nif (!responses || responses.length === 0) return [{ json: { text: '' } }];\nconst fullText = responses[0]?.fullTextAnnotation?.text || responses[0]?.textAnnotations?.[0]?.description || '';\nreturn [{ json: { text: fullText } }];"
+      },
+      "id": "8fda0183-0248-46c1-b99d-ec6dffafe367",
+      "name": "Parse Vision Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8368, 2000]
+    },
+    {
+      "parameters": {
+        "jsCode": "const invoiceText = $input.first().json.text || '';\n\nconst payload = {\n  model: 'llama-3.3-70b-versatile',\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: 'You are an invoice data extractor. Respond with ONLY a raw valid JSON object. No markdown. No code fences. No explanation. ALL values must be strings. Never return integers or floats.'\n    },\n    {\n      role: 'user',\n      content: `Extract ALL of the following from the invoice text and return ONLY a raw JSON object.\\n\\nCRITICAL RULES:\\n- Every value must be a STRING. No integers or floats.\\n- Numbers with comma decimal (719,28) return exactly as-is as string.\\n- product_id: plain string, never scientific notation.\\n- If a field is not found return null.\\n\\nFields:\\n- dt: invoice date YYYY-MM-DD\\n- order_ts: order timestamp, null if not found\\n- order_id: order or invoice number\\n- channel: sales channel (Online/Store/App), null if not found\\n- coupon_code: coupon code, null if not found\\n\\n- customer: object with:\\n  - customer_id: ID starting with CUST, null if not found\\n  - phone: phone number as string, null if not found\\n  - country: full country name, null if not found\\n  - country_code: 2-letter ISO code e.g. US, IN, GB, null if not found\\n  - state: state or province, null if not found\\n\\n- items: array of ALL line items, each with:\\n  - item_seq: row number as string\\n  - sku: SKU or item code if available, null if not found\\n  - product_name: full product description\\n  - product_id: find the product code, if explicitly present, if code is not available take the product name , null if not found\\n  - brand_name: brand extracted from product name (e.g. Dell, HP, Apple, Samsung). Must be consistent — always title case.\\n  - category_name: infer category from product name (e.g. Computers, Laptops, Phones, Monitors, Accessories). If unclear, infer from context.\\n  - color: color if mentioned, null if not\\n  - size: size if mentioned, null if not\\n  - material: material if mentioned, null if not\\n  - quantity: as string\\n  - unit_price_currency: currency code e.g. USD, null if not found\\n  - unit_price: as string, keep original format\\n  - discount_pct: string with % e.g. 3%, null if not found\\n  - tax_rate: the tax rate for this line item as a string e.g. \"25\", \"35\".   If the invoice shows one global tax (e.g. TAX 25%), apply that rate to ALL items.  If each item has its own rate, use that item's specific rate.  Return \"0\" if no tax found.- tax_amount: do NOT calculate this, leave it null. It will be calculated later.\\n\\nInvoice text:\\n${invoiceText}`\n    }\n  ]\n};\n\nreturn [{ json: { groqPayload: payload } }];"
+      },
+      "id": "6293861e-f194-4267-a44f-4f1caf7bef44",
+      "name": "Build Groq Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8592, 1856]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer your own api key"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.groqPayload) }}",
+        "options": {}
+      },
+      "id": "afda6ac7-afc2-42ea-8d1c-3d1dd2ece49e",
+      "name": "Call Groq for Field Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [8816, 1856]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst rawText = raw?.choices?.[0]?.message?.content || '';\n\nfunction stripFences(str) {\n  return str.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n}\nfunction randomId(prefix, digits) {\n  const num = Math.floor(Math.random() * Math.pow(10, digits));\n  return prefix + String(num).padStart(digits, '0');\n}\nfunction isEmpty(val) {\n  if (val === null || val === undefined) return true;\n  const s = String(val).trim().toLowerCase();\n  return s === '' || s === 'null' || s === 'undefined';\n}\nfunction cat(val, fallback) {\n  if (isEmpty(val)) return fallback || 'N/A';\n  return String(val).trim();\n}\nfunction num(val) {\n  if (isEmpty(val)) return '0';\n  const str = String(val).replace(/[^0-9.]/g, '');\n  return str || '0';\n}\nfunction todayDateString() {\n  const now = new Date();\n  const dd = String(now.getDate()).padStart(2,'0');\n  const mm = String(now.getMonth()+1).padStart(2,'0');\n  const yyyy = now.getFullYear();\n  return `${dd}-${mm}-${yyyy}`;\n}\nfunction nowDateTimeString() {\n  const now = new Date();\n  let h = now.getHours();\n  const mm = String(now.getMinutes()).padStart(2,'0');\n  const ss = String(now.getSeconds()).padStart(2,'0');\n  const ampm = h >= 12 ? 'PM' : 'AM';\n  h = h % 12 || 12;\n  return `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()} ${h}:${mm}:${ss} ${ampm}`;\n}\n\n// ── Convert any date format to DD-MM-YYYY ─────────────────────────────────\nfunction toDisplayFormat(val) {\n  const s = String(val).trim();\n  // YYYY-MM-DD → DD-MM-YYYY\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) {\n    const [y, m, d] = s.split('-');\n    return `${d}-${m}-${y}`;\n  }\n  // M/D/YYYY → DD-MM-YYYY\n  if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/.test(s)) {\n    const [m, d, y] = s.split('/');\n    return `${String(d).padStart(2,'0')}-${String(m).padStart(2,'0')}-${y}`;\n  }\n  // Already DD-MM-YYYY or unknown — return as-is\n  return s;\n}\n\nfunction normalizeBrandCode(brandName, productName) {\n  const source = !isEmpty(brandName) ? String(brandName) : (!isEmpty(productName) ? String(productName) : '');\n  if (!source) return 'N/A';\n  const b = source.trim().toUpperCase();\n  const map = {\n    'DELL':'DELL','HP':'HP','HEWLETT PACKARD':'HP','APPLE':'APPLE',\n    'SAMSUNG':'SAMSUNG','LENOVO':'LENOVO','ASUS':'ASUS','ACER':'ACER',\n    'MICROSOFT':'MICROSOFT','SONY':'SONY','LG':'LG','TOSHIBA':'TOSHIBA',\n    'NITRILE':'NITRILE','LATEX':'LATEX','VINYL':'VINYL','COTTON':'COTTON',\n    'NIKE':'NIKE','ADIDAS':'ADIDAS','PUMA':'PUMA'\n  };\n  for (const [key, code] of Object.entries(map)) {\n    if (b.includes(key)) return code;\n  }\n  const firstWord = b.split(/[\\s\\-_\\/]+/)[0].replace(/[^A-Z0-9]/g, '');\n  return firstWord || 'N/A';\n}\n\nfunction normalizeCategoryCode(categoryName, productName) {\n  const source = !isEmpty(categoryName) ? String(categoryName) : (!isEmpty(productName) ? String(productName) : '');\n  if (!source) return 'GENERAL';\n  const c = source.trim().toUpperCase();\n  const map = {\n    'COMPUTER':'COMPUTERS','DESKTOP':'COMPUTERS','LAPTOP':'LAPTOPS',\n    'NOTEBOOK':'LAPTOPS','PHONE':'PHONES','MOBILE':'PHONES','SMARTPHONE':'PHONES',\n    'MONITOR':'MONITORS','DISPLAY':'MONITORS','TABLET':'TABLETS',\n    'PRINTER':'PRINTERS','ACCESSORY':'ACCESSORIES','ACCESSORIES':'ACCESSORIES',\n    'KEYBOARD':'ACCESSORIES','MOUSE':'ACCESSORIES','SERVER':'SERVERS',\n    'STORAGE':'STORAGE','NETWORKING':'NETWORKING','SOFTWARE':'SOFTWARE',\n    'GLOVE':'SAFETY_EQUIPMENT','SAFETY':'SAFETY_EQUIPMENT','MEDICAL':'MEDICAL_SUPPLIES',\n    'CLOTHING':'CLOTHING','APPAREL':'CLOTHING','SHOE':'FOOTWEAR','BOOT':'FOOTWEAR',\n    'FURNITURE':'FURNITURE','CHAIR':'FURNITURE','DESK':'FURNITURE',\n    'TOOL':'TOOLS','DRILL':'TOOLS','SAW':'TOOLS',\n    'FOOD':'FOOD_BEVERAGE','DRINK':'FOOD_BEVERAGE','BEVERAGE':'FOOD_BEVERAGE'\n  };\n  for (const [key, code] of Object.entries(map)) {\n    if (c.includes(key)) return code;\n  }\n  const cleaned = c.replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');\n  return cleaned.substring(0, 20) || 'GENERAL';\n}\n\nfunction validateCustomerId(val) {\n  if (isEmpty(val)) return randomId('CUST', 10);\n  const str = String(val).trim();\n  if (str.toUpperCase().startsWith('CUST')) return str;\n  return randomId('CUST', 10);\n}\n\nconst cleaned = stripFences(rawText);\nlet output;\ntry {\n  output = JSON.parse(cleaned);\n} catch(e) {\n  return [{ json: { _parse_error: cleaned.substring(0, 300) } }];\n}\n\nconst order_ts    = isEmpty(output.order_ts) ? nowDateTimeString() : String(output.order_ts);\nconst channel     = cat(output.channel, 'Online');\nconst customerRaw = output.customer || {};\nconst customer_id = validateCustomerId(customerRaw.customer_id);\nconst order_id    = !isEmpty(output.order_id) ? String(output.order_id)\n                  : (!isEmpty(output.invoice_id) ? String(output.invoice_id)\n                  : 'ORD' + String(Math.floor(Math.random() * 9000000000) + 1000000000));\n\n// ── dt always in DD-MM-YYYY ───────────────────────────────────────────────\nconst dt = isEmpty(output.dt) ? todayDateString() : toDisplayFormat(output.dt);\n\nlet items = [];\ntry {\n  if (typeof output.items === 'string') items = JSON.parse(stripFences(output.items));\n  else if (Array.isArray(output.items)) items = output.items;\n  else items = [{}];\n} catch(e) { items = [{}]; }\nif (items.length === 0) items = [{}];\n\nconst orderRows      = [];\nconst productRows    = [];\nconst categoryRows   = [];\nconst brandRows      = [];\nconst seenCategories = new Set();\nconst seenBrands     = new Set();\nconst seenProducts   = new Set();\n\nfor (const item of items) {\n  const productName  = cat(item.product_name, 'N/A');\n  const brandName    = !isEmpty(item.brand_name) ? String(item.brand_name).trim() : productName;\n  const brandCode    = normalizeBrandCode(item.brand_name, productName);\n  const categoryName = !isEmpty(item.category_name) ? String(item.category_name).trim() : productName;\n  const categoryCode = normalizeCategoryCode(item.category_name, productName);\n  const itemSeq      = isEmpty(item.item_seq) ? '0' : String(item.item_seq);\n  const product_id   = !isEmpty(item.product_id) ? String(item.product_id)\n                     : (brandCode !== 'N/A' && itemSeq !== '0' ? `${brandCode}-${itemSeq}` : randomId('PROD', 7));\n\n  orderRows.push({\n    dt:                  String(dt),\n    order_ts:            String(order_ts),\n    customer_id:         String(customer_id),\n    order_id:            String(order_id),\n    channel:             String(channel),\n    coupon_code:         cat(output.coupon_code, 'N/A'),\n    item_seq:            String(itemSeq),\n    product_id:          String(product_id),\n    quantity:            String(num(item.quantity)),\n    unit_price_currency: cat(item.unit_price_currency, 'USD'),\n    unit_price:          String(num(item.unit_price)),\n    discount_pct:        isEmpty(item.discount_pct) ? '0%' : String(item.discount_pct),\n    tax_amount:          String((() => {\n      const price = parseFloat(num(item.unit_price)) || 0;\n      const qty   = parseFloat(num(item.quantity))   || 1;\n      const rate  = parseFloat(String(item.tax_rate || output.tax_rate || '0').replace(/[^0-9.]/g, '')) || 0;\n      return (Math.round(price * qty * rate / 100 * 100) / 100).toFixed(2);\n    })())\n  });\n\n  if (!seenProducts.has(product_id)) {\n    seenProducts.add(product_id);\n    productRows.push({\n      product_id:    String(product_id),\n      sku:           cat(item.sku, 'N/A'),\n      product_name:  String(productName),\n      category_code: String(categoryCode),\n      brand_code:    String(brandCode),\n      color:         cat(item.color, 'N/A'),\n      size:          cat(item.size, 'N/A'),\n      material:      cat(item.material, 'N/A'),\n      weight_grams:  String(num(item.weight_grams)),\n      length_cm:     String(num(item.length_cm)),\n      width_cm:      String(num(item.width_cm)),\n      height_cm:     String(num(item.height_cm)),\n      rating_count:  String(num(item.rating_count))\n    });\n  }\n\n  if (!seenCategories.has(categoryCode)) {\n    seenCategories.add(categoryCode);\n    categoryRows.push({\n      category_code: String(categoryCode),\n      category_name: String(categoryName)\n    });\n  }\n\n  if (!seenBrands.has(brandCode)) {\n    seenBrands.add(brandCode);\n    brandRows.push({\n      brand_code:    String(brandCode),\n      brand_name:    String(brandName),\n      category_code: String(categoryCode)\n    });\n  }\n}\n\nconst customerRow = {\n  customer_id:  String(customer_id),\n  phone:        cat(customerRaw.phone, 'N/A'),\n  country_code: cat(customerRaw.country_code, 'N/A'),\n  country:      cat(customerRaw.country, 'N/A'),\n  state:        cat(customerRaw.state, 'N/A')\n};\n\nconst dateDimension = [\n  {date:\"01-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-31\"},\n  {date:\"02-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-31\"},\n  {date:\"03-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-31\"},\n  {date:\"04-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"05-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"06-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"07-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"08-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"09-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"10-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-32\"},\n  {date:\"11-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"12-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"13-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"14-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"15-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"16-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"17-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-33\"},\n  {date:\"18-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"19-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"20-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"21-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"22-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"23-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"24-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-34\"},\n  {date:\"25-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"26-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"27-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"28-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"29-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"30-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"31-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-35\"},\n  {date:\"01-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"02-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"03-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"04-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"05-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"06-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"07-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-36\"},\n  {date:\"08-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"09-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"10-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"11-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"12-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"13-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"14-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-37\"},\n  {date:\"15-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"16-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"17-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"18-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"19-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"20-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"21-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-38\"},\n  {date:\"22-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"23-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"24-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"25-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"26-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"27-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"28-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-39\"},\n  {date:\"29-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-40\"},\n  {date:\"30-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-40\"},\n  {date:\"01-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-40\"},\n  {date:\"02-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-40\"},\n  {date:\"03-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-40\"},\n  {date:\"04-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-40\"},\n  {date:\"05-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-40\"},\n  {date:\"06-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"07-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"08-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"09-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"10-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"11-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"12-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-41\"},\n  {date:\"13-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"14-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"15-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"16-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"17-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"18-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"19-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-42\"},\n  {date:\"20-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"21-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"22-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"23-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"24-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"25-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"26-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-43\"},\n  {date:\"27-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-44\"},\n  {date:\"28-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-44\"},\n  {date:\"29-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-44\"},\n  {date:\"30-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-44\"},\n  {date:\"31-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-44\"}\n];\n\n// dt is already DD-MM-YYYY, look it up directly\nlet dateRow = dateDimension.find(r => r.date === dt) || null;\nif (!dateRow) {\n  // fallback: build a row dynamically\n  let d;\n  const parts = dt.split('-');\n  if (parts.length === 3 && parts[2].length === 4) {\n    // DD-MM-YYYY\n    d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);\n  } else {\n    d = new Date(dt);\n  }\n  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n  const month = d.getMonth()+1;\n  dateRow = {\n    date:         String(dt),\n    year:         String(d.getFullYear()),\n    day_name:     String(dayNames[d.getDay()] || 'N/A'),\n    quarter:      String(Math.ceil(month/3)),\n    week_of_year: String((() => {\n      const jan1 = new Date(d.getFullYear(), 0, 1);\n      return Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);\n    })())\n  };\n}\n\nreturn [{\n  json: { orderRows, productRows, categoryRows, brandRows, customerRow, dateRow }\n}];\n\n// const raw = $input.first().json;\n// const rawText = raw?.choices?.[0]?.message?.content || '';\n\n// function stripFences(str) {\n//   return str.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n// }\n// function randomId(prefix, digits) {\n//   const num = Math.floor(Math.random() * Math.pow(10, digits));\n//   return prefix + String(num).padStart(digits, '0');\n// }\n// function isEmpty(val) {\n//   if (val === null || val === undefined) return true;\n//   const s = String(val).trim().toLowerCase();\n//   return s === '' || s === 'null' || s === 'undefined';\n// }\n// // Force everything to string — categorical fallback = \"N/A\"\n// function cat(val, fallback) {\n//   if (isEmpty(val)) return fallback || 'N/A';\n//   return String(val).trim();\n// }\n// // Force numeric to string — null = \"0\"\n// function num(val) {\n//   if (isEmpty(val)) return '0';\n//   const str = String(val).replace(/[^0-9.]/g, '');\n//   return str || '0';\n// }\n// function todayDateString() {\n//   const now = new Date();\n//   return `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()}`;\n// }\n// function nowDateTimeString() {\n//   const now = new Date();\n//   let h = now.getHours();\n//   const mm = String(now.getMinutes()).padStart(2,'0');\n//   const ss = String(now.getSeconds()).padStart(2,'0');\n//   const ampm = h >= 12 ? 'PM' : 'AM';\n//   h = h % 12 || 12;\n//   return `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()} ${h}:${mm}:${ss} ${ampm}`;\n// }\n\n// // ── Fix 2: Brand code — fallback to product name if brand is missing ──────\n// function normalizeBrandCode(brandName, productName) {\n//   // Try brand name first\n//   const source = !isEmpty(brandName) ? String(brandName) : (!isEmpty(productName) ? String(productName) : '');\n//   if (!source) return 'N/A';\n//   const b = source.trim().toUpperCase();\n//   const map = {\n//     'DELL':'DELL','HP':'HP','HEWLETT PACKARD':'HP','APPLE':'APPLE',\n//     'SAMSUNG':'SAMSUNG','LENOVO':'LENOVO','ASUS':'ASUS','ACER':'ACER',\n//     'MICROSOFT':'MICROSOFT','SONY':'SONY','LG':'LG','TOSHIBA':'TOSHIBA',\n//     'NITRILE':'NITRILE','LATEX':'LATEX','VINYL':'VINYL','COTTON':'COTTON',\n//     'NIKE':'NIKE','ADIDAS':'ADIDAS','PUMA':'PUMA'\n//   };\n//   for (const [key, code] of Object.entries(map)) {\n//     if (b.includes(key)) return code;\n//   }\n//   // Use first meaningful word from source\n//   const firstWord = b.split(/[\\s\\-_\\/]+/)[0].replace(/[^A-Z0-9]/g, '');\n//   return firstWord || 'N/A';\n// }\n\n// // ── Fix 3: Category from product or category name ─────────────────────────\n// function normalizeCategoryCode(categoryName, productName) {\n//   const source = !isEmpty(categoryName) ? String(categoryName) : (!isEmpty(productName) ? String(productName) : '');\n//   if (!source) return 'GENERAL';\n//   const c = source.trim().toUpperCase();\n//   const map = {\n//     'COMPUTER':'COMPUTERS','DESKTOP':'COMPUTERS','LAPTOP':'LAPTOPS',\n//     'NOTEBOOK':'LAPTOPS','PHONE':'PHONES','MOBILE':'PHONES','SMARTPHONE':'PHONES',\n//     'MONITOR':'MONITORS','DISPLAY':'MONITORS','TABLET':'TABLETS',\n//     'PRINTER':'PRINTERS','ACCESSORY':'ACCESSORIES','ACCESSORIES':'ACCESSORIES',\n//     'KEYBOARD':'ACCESSORIES','MOUSE':'ACCESSORIES','SERVER':'SERVERS',\n//     'STORAGE':'STORAGE','NETWORKING':'NETWORKING','SOFTWARE':'SOFTWARE',\n//     'GLOVE':'SAFETY_EQUIPMENT','SAFETY':'SAFETY_EQUIPMENT','MEDICAL':'MEDICAL_SUPPLIES',\n//     'CLOTHING':'CLOTHING','APPAREL':'CLOTHING','SHOE':'FOOTWEAR','BOOT':'FOOTWEAR',\n//     'FURNITURE':'FURNITURE','CHAIR':'FURNITURE','DESK':'FURNITURE',\n//     'TOOL':'TOOLS','DRILL':'TOOLS','SAW':'TOOLS',\n//     'FOOD':'FOOD_BEVERAGE','DRINK':'FOOD_BEVERAGE','BEVERAGE':'FOOD_BEVERAGE'\n//   };\n//   for (const [key, code] of Object.entries(map)) {\n//     if (c.includes(key)) return code;\n//   }\n//   // Use cleaned category name\n//   const cleaned = c.replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');\n//   return cleaned.substring(0, 20) || 'GENERAL';\n// }\n\n// function validateCustomerId(val) {\n//   if (isEmpty(val)) return randomId('CUST', 10);\n//   const str = String(val).trim();\n//   if (str.toUpperCase().startsWith('CUST')) return str;\n//   return randomId('CUST', 10);\n// }\n\n// const cleaned = stripFences(rawText);\n// let output;\n// try {\n//   output = JSON.parse(cleaned);\n// } catch(e) {\n//   return [{ json: { _parse_error: cleaned.substring(0, 300) } }];\n// }\n\n// const order_ts    = isEmpty(output.order_ts) ? nowDateTimeString() : String(output.order_ts);\n// const channel     = cat(output.channel, 'Online');\n// const customerRaw = output.customer || {};\n// const customer_id = validateCustomerId(customerRaw.customer_id);\n// const order_id    = !isEmpty(output.order_id) ? String(output.order_id)\n//                   : (!isEmpty(output.invoice_id) ? String(output.invoice_id)\n//                   : 'ORD' + String(Math.floor(Math.random() * 9000000000) + 1000000000));\n// const dt          = isEmpty(output.dt) ? todayDateString() : String(output.dt);\n\n// // ── Parse items — Fix 4: each product gets its own row ───────────────────\n// let items = [];\n// try {\n//   if (typeof output.items === 'string') items = JSON.parse(stripFences(output.items));\n//   else if (Array.isArray(output.items)) items = output.items;\n//   else items = [{}];\n// } catch(e) { items = [{}]; }\n// if (items.length === 0) items = [{}];\n\n// const orderRows      = [];\n// const productRows    = [];\n// const categoryRows   = [];\n// const brandRows      = [];\n// const seenCategories = new Set();\n// const seenBrands     = new Set();\n// const seenProducts   = new Set();\n\n// for (const item of items) {\n//   const productName  = cat(item.product_name, 'N/A');\n\n//   // Fix 2: brand from brand_name, fallback to product_name\n//   const brandName    = !isEmpty(item.brand_name) ? String(item.brand_name).trim() : productName;\n//   const brandCode    = normalizeBrandCode(item.brand_name, productName);\n\n//   // Fix 3: category from category_name, fallback to product_name\n//   const categoryName = !isEmpty(item.category_name) ? String(item.category_name).trim() : productName;\n//   const categoryCode = normalizeCategoryCode(item.category_name, productName);\n\n//   const itemSeq   = isEmpty(item.item_seq) ? '0' : String(item.item_seq);\n//   const product_id = !isEmpty(item.product_id) ? String(item.product_id)\n//                    : (brandCode !== 'N/A' && itemSeq !== '0' ? `${brandCode}-${itemSeq}` : randomId('PROD', 7));\n\n//   // ── order_items row — Fix 5: all strings ─────────────────────────────\n//   orderRows.push({\n//     dt:                  String(dt),\n//     order_ts:            String(order_ts),\n//     customer_id:         String(customer_id),\n//     order_id:            String(order_id),\n//     channel:             String(channel),\n//     coupon_code:         cat(output.coupon_code, 'N/A'),\n//     item_seq:            String(itemSeq),\n//     product_id:          String(product_id),\n//     quantity:            String(num(item.quantity)),\n//     unit_price_currency: cat(item.unit_price_currency, 'USD'),\n//     unit_price:          String(num(item.unit_price)),\n//     discount_pct:        isEmpty(item.discount_pct) ? '0%' : String(item.discount_pct),\n//     tax_amount:          String((() => {\n//       const price = parseFloat(num(item.unit_price)) || 0;\n//       const qty   = parseFloat(num(item.quantity))   || 1;\n//       const rate  = parseFloat(String(item.tax_rate || output.tax_rate || '0').replace(/[^0-9.]/g, '')) || 0;\n//       return (Math.round(price * qty * rate / 100 * 100) / 100).toFixed(2);\n//     })())\n//   });\n\n//   // ── Fix 4: one productRow per item — Fix 5: all strings ──────────────\n//   if (!seenProducts.has(product_id)) {\n//     seenProducts.add(product_id);\n//     productRows.push({\n//       product_id:    String(product_id),\n//       sku:           cat(item.sku, 'N/A'),\n//       product_name:  String(productName),\n//       category_code: String(categoryCode),\n//       brand_code:    String(brandCode),\n//       color:         cat(item.color, 'N/A'),\n//       size:          cat(item.size, 'N/A'),\n//       material:      cat(item.material, 'N/A'),\n//       weight_grams:  String(num(item.weight_grams)),\n//       length_cm:     String(num(item.length_cm)),\n//       width_cm:      String(num(item.width_cm)),\n//       height_cm:     String(num(item.height_cm)),\n//       rating_count:  String(num(item.rating_count))\n//     });\n//   }\n\n//   // ── categories (deduplicated) — Fix 5: all strings ───────────────────\n//   if (!seenCategories.has(categoryCode)) {\n//     seenCategories.add(categoryCode);\n//     categoryRows.push({\n//       category_code: String(categoryCode),\n//       category_name: String(categoryName)\n//     });\n//   }\n\n//   // ── brands (deduplicated) — Fix 5: all strings ───────────────────────\n//   if (!seenBrands.has(brandCode)) {\n//     seenBrands.add(brandCode);\n//     brandRows.push({\n//       brand_code:    String(brandCode),\n//       brand_name:    String(brandName),\n//       category_code: String(categoryCode)\n//     });\n//   }\n// }\n\n// // ── customer — Fix 5: all strings ────────────────────────────────────────\n// const customerRow = {\n//   customer_id:  String(customer_id),\n//   phone:        cat(customerRaw.phone, 'N/A'),\n//   country_code: cat(customerRaw.country_code, 'N/A'),\n//   country:      cat(customerRaw.country, 'N/A'),\n//   state:        cat(customerRaw.state, 'N/A')\n// };\n\n// // ── date row — Fix 5: all strings ────────────────────────────────────────\n// function toDimensionFormat(dtStr) {\n//   const s = String(dtStr).trim();\n//   if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) { const [y,m,d] = s.split('-'); return `${d}-${m}-${y}`; }\n//   if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/.test(s)) { const [m,d,y] = s.split('/'); return `${String(d).padStart(2,'0')}-${String(m).padStart(2,'0')}-${y}`; }\n//   return null;\n// }\n// const dateDimension = [\n//   {date:\"01-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-31\"},\n//   {date:\"02-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-31\"},\n//   {date:\"03-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-31\"},\n//   {date:\"04-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"05-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"06-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"07-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"08-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"09-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"10-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-32\"},\n//   {date:\"11-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"12-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"13-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"14-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"15-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"16-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"17-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-33\"},\n//   {date:\"18-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"19-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"20-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"21-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"22-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"23-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"24-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-34\"},\n//   {date:\"25-08-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"26-08-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"27-08-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"28-08-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"29-08-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"30-08-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"31-08-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-35\"},\n//   {date:\"01-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"02-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"03-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"04-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"05-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"06-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"07-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-36\"},\n//   {date:\"08-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"09-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"10-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"11-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"12-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"13-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"14-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-37\"},\n//   {date:\"15-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"16-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"17-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"18-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"19-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"20-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"21-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-38\"},\n//   {date:\"22-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"23-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"24-09-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"25-09-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"26-09-2025\",year:\"2025\",day_name:\"friday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"27-09-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"28-09-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"3\",week_of_year:\"-39\"},\n//   {date:\"29-09-2025\",year:\"2025\",day_name:\"monday\",quarter:\"3\",week_of_year:\"-40\"},\n//   {date:\"30-09-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"3\",week_of_year:\"-40\"},\n//   {date:\"01-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-40\"},\n//   {date:\"02-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-40\"},\n//   {date:\"03-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-40\"},\n//   {date:\"04-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-40\"},\n//   {date:\"05-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-40\"},\n//   {date:\"06-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"07-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"08-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"09-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"10-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"11-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"12-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-41\"},\n//   {date:\"13-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"14-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"15-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"16-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"17-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"18-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"19-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-42\"},\n//   {date:\"20-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"21-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"22-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"23-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"24-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"25-10-2025\",year:\"2025\",day_name:\"saturday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"26-10-2025\",year:\"2025\",day_name:\"sunday\",quarter:\"4\",week_of_year:\"-43\"},\n//   {date:\"27-10-2025\",year:\"2025\",day_name:\"monday\",quarter:\"4\",week_of_year:\"-44\"},\n//   {date:\"28-10-2025\",year:\"2025\",day_name:\"tuesday\",quarter:\"4\",week_of_year:\"-44\"},\n//   {date:\"29-10-2025\",year:\"2025\",day_name:\"wednesday\",quarter:\"4\",week_of_year:\"-44\"},\n//   {date:\"30-10-2025\",year:\"2025\",day_name:\"thursday\",quarter:\"4\",week_of_year:\"-44\"},\n//   {date:\"31-10-2025\",year:\"2025\",day_name:\"friday\",quarter:\"4\",week_of_year:\"-44\"}\n// ];\n// const dimKey = toDimensionFormat(dt);\n// let dateRow = dimKey ? dateDimension.find(r => r.date === dimKey) || null : null;\n// if (!dateRow) {\n//   let d;\n//   if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/.test(dt)) {\n//     const [m,day,y] = dt.split('/');\n//     d = new Date(`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`);\n//   } else { d = new Date(dt); }\n//   const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n//   const month = d.getMonth()+1;\n//   dateRow = {\n//     date:         String(dt),\n//     year:         String(d.getFullYear()),\n//     day_name:     String(dayNames[d.getDay()] || 'N/A'),\n//     quarter:      String(Math.ceil(month/3)),\n//     week_of_year: String((() => {\n//   const jan1 = new Date(d.getFullYear(), 0, 1);\n//   return Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);\n// })())\n//   };\n// }\n\n// return [{\n//   json: { orderRows, productRows, categoryRows, brandRows, customerRow, dateRow }\n// }];"
+      },
+      "id": "5bd6b7cd-c57a-4f9a-ada5-cbffdec367aa",
+      "name": "Parse & Build All Tables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9040, 1856]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert array of objects to CSV string\nfunction toCSV(rows) {\n  if (!rows || rows.length === 0) return '';\n  if (!rows[0] || typeof rows[0] !== 'object') return '';\n  const headers = Object.keys(rows[0]);\n  const lines = [headers.join(',')];\n  for (const row of rows) {\n    const values = headers.map(h => {\n      const v = row[h];\n      if (v === null || v === undefined) return '';\n      const str = String(v);\n      if (str.includes(',') || str.includes('\"') || str.includes('\\n')) {\n        return '\"' + str.replace(/\"/g, '\"\"') + '\"';\n      }\n      return str;\n    });\n    lines.push(values.join(','));\n  }\n  return lines.join('\\n');\n}\n\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    order_items_csv: toCSV(data.orderRows),\n    products_csv:    toCSV(data.productRows),\n    categories_csv:  toCSV(data.categoryRows),\n    brands_csv:      toCSV(data.brandRows),\n    customers_csv:   toCSV(data.customerRow ? [data.customerRow] : []),\n    dates_csv:       toCSV(data.dateRow     ? [data.dateRow]     : []),\n    // pass through all raw arrays for Split → Append nodes\n    orderRows:    data.orderRows    || [],\n    productRows:  data.productRows  || [],\n    categoryRows: data.categoryRows || [],\n    brandRows:    data.brandRows    || [],\n    customerRow:  data.customerRow  || {},\n    dateRow:      data.dateRow      || {}\n  }\n}];"
+      },
+      "id": "cec0fd47-7c58-42cd-8edd-251eb52a2952",
+      "name": "Build CSV Strings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9264, 1856]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Append order_items rows to Google Sheet\nconst data = $input.first().json;\nreturn data.orderRows.map(row => ({ json: row }));"
+      },
+      "id": "8b62ddcd-9e91-448d-b93e-b50b9373907c",
+      "name": "Split Order Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 1712]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1I-ioNaTWygtPWwKqfOr7gwrGANv65GtMYz6hFiOUDx8",
+          "mode": "list",
+          "cachedResultName": "January Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1I-ioNaTWygtPWwKqfOr7gwrGANv65GtMYz6hFiOUDx8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dt": "={{ $json.dt }}",
+            "order_ts": "={{ $json.order_ts }}",
+            "customer_id": "={{ $json.customer_id }}",
+            "order_id": "={{ $json.order_id }}",
+            "item_seq": "={{ $json.item_seq }}",
+            "product_id": "={{ $json.product_id ? \"'\" + $json.product_id : '' }}",
+            "quantity": "={{ $json.quantity }}",
+            "unit_price_currency": "={{ $json.unit_price_currency }}",
+            "unit_price": "={{ $json.unit_price }}",
+            "discount_pct": "={{ $json.discount_pct }}",
+            "tax_amount": "={{ $json.tax_amount }}",
+            "channel": "={{ $json.channel }}",
+            "coupon_code": "={{ $json.coupon_code }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dt",
+              "displayName": "dt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_ts",
+              "displayName": "order_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_id",
+              "displayName": "customer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "item_seq",
+              "displayName": "item_seq",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "unit_price_currency",
+              "displayName": "unit_price_currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "unit_price",
+              "displayName": "unit_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "discount_pct",
+              "displayName": "discount_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tax_amount",
+              "displayName": "tax_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "coupon_code",
+              "displayName": "coupon_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9712, 1712],
+      "id": "d3dbd17a-8ff2-42bd-8218-ef68a3f209cb",
+      "name": "Append Order Rows to Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst csvStr = data.customers_csv || '';\nconst buffer = Buffer.from(csvStr, 'utf8');\nreturn [{\n  json: { filename: 'customers' },\n  binary: { data: { data: buffer.toString('base64'), mimeType: 'text/csv', fileName: 'customers.csv' } }\n}];"
+      },
+      "id": "4c7b6465-c289-4056-b9ac-fd0af3d2e761",
+      "name": "Prep customers CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 2000]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Customers/customers_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10384, 2000],
+      "id": "3cbc49df-c702-4295-b659-da787c8d3ff4",
+      "name": "Upload customers to S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst csvStr = data.products_csv || '';\nconst buffer = Buffer.from(csvStr, 'utf8');\nreturn [{\n  json: { filename: 'products' },\n  binary: { data: { data: buffer.toString('base64'), mimeType: 'text/csv', fileName: 'products.csv' } }\n}];"
+      },
+      "id": "aad6f710-53d9-4786-9b5f-c6a5e235bb02",
+      "name": "Prep products CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 2144]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Products/products_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10384, 2144],
+      "id": "b1354bde-6832-4705-9913-329e717c35a8",
+      "name": "Upload products to S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst csvStr = data.categories_csv || '';\nconst buffer = Buffer.from(csvStr, 'utf8');\nreturn [{\n  json: { filename: 'categories' },\n  binary: { data: { data: buffer.toString('base64'), mimeType: 'text/csv', fileName: 'categories.csv' } }\n}];"
+      },
+      "id": "924f5b54-8f41-4442-afd4-0ed8ac81e55e",
+      "name": "Prep categories CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 2288]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Categories/categories_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10384, 2288],
+      "id": "991d6178-0c4c-4fcc-a74b-600d93127b30",
+      "name": "Upload categories to S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst csvStr = data.brands_csv || '';\nconst buffer = Buffer.from(csvStr, 'utf8');\nreturn [{\n  json: { filename: 'brands' },\n  binary: { data: { data: buffer.toString('base64'), mimeType: 'text/csv', fileName: 'brands.csv' } }\n}];"
+      },
+      "id": "a885290b-7cf2-4a1c-a8af-74672bf1636f",
+      "name": "Prep brands CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 2432]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Brands/brands_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10384, 2432],
+      "id": "087423c7-09db-4de7-a1e0-808c82ac814b",
+      "name": "Upload brands to S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1I-ioNaTWygtPWwKqfOr7gwrGANv65GtMYz6hFiOUDx8",
+          "mode": "id"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [9920, 1712],
+      "id": "e6afcd89-8513-4218-ba89-3d3b14c414d0",
+      "name": "Download Sheet as CSV",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dbc-115cae0d-a179.cloud.databricks.com/api/2.1/jobs/run-now",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "databricksApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "job_id",
+              "value": "179472356817358"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [10624, 2576],
+      "id": "d6d5cc05-387b-4d99-b1fd-32ffb04366d3",
+      "name": "HTTP Request",
+      "credentials": {
+        "databricksApi": {
+          "id": "IihhOjApDXFz6qRO",
+          "name": "Databricks account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nfunction isEmpty(val) {\n  if (val === null || val === undefined) return true;\n  const s = String(val).trim().toLowerCase();\n  return s === '' || s === 'null' || s === 'undefined';\n}\nfunction todayDateString() {\n  const now = new Date();\n  return `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()}`;\n}\nconst rawDate = data.orderRows && data.orderRows[0] ? data.orderRows[0].dt : null;\nconst invoiceDate = isEmpty(rawDate) ? todayDateString() : String(rawDate).trim();\n\nconst dateDimension = [\n  { date: \"01-08-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-31\" },\n  { date: \"02-08-2025\", year: \"2025\", day_name: \"SATURDAY\", quarter: \"3\", week_of_year: \"-31\" },\n  { date: \"03-08-2025\", year: \"2025\", day_name: \"SUNDAY\", quarter: \"3\", week_of_year: \"-31\" },\n  { date: \"04-08-2025\", year: \"2025\", day_name: \"MONDAY\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"05-08-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"06-08-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"07-08-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"08-08-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"09-08-2025\", year: \"2025\", day_name: \"SATURDAY\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"10-08-2025\", year: \"2025\", day_name: \"SUNDAY\", quarter: \"3\", week_of_year: \"-32\" },\n  { date: \"11-08-2025\", year: \"2025\", day_name: \"MONDAY\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"12-08-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"13-08-2025\", year: \"2025\", day_name: \"wednesday\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"14-08-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"15-08-2025\", year: \"2025\", day_name: \"FRIDAY\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"16-08-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"17-08-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-33\" },\n  { date: \"18-08-2025\", year: \"2025\", day_name: \"MONDAY\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"19-08-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"20-08-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"21-08-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"22-08-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"23-08-2025\", year: \"2025\", day_name: \"SATURDAY\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"24-08-2025\", year: \"2025\", day_name: \"SUNDAY\", quarter: \"3\", week_of_year: \"-34\" },\n  { date: \"25-08-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"26-08-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"27-08-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"28-08-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"29-08-2025\", year: \"2025\", day_name: \"FRIDAY\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"30-08-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"31-08-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-35\" },\n  { date: \"01-09-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"02-09-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"03-09-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"04-09-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"05-09-2025\", year: \"2025\", day_name: \"FRIDAY\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"06-09-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"07-09-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-36\" },\n  { date: \"08-09-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"09-09-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"10-09-2025\", year: \"2025\", day_name: \"wednesday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"11-09-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"12-09-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"13-09-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"14-09-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-37\" },\n  { date: \"15-09-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"16-09-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"17-09-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"18-09-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"19-09-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"20-09-2025\", year: \"2025\", day_name: \"SATURDAY\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"21-09-2025\", year: \"2025\", day_name: \"SUNDAY\", quarter: \"3\", week_of_year: \"-38\" },\n  { date: \"22-09-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"23-09-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"24-09-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"25-09-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"26-09-2025\", year: \"2025\", day_name: \"friday\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"27-09-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"28-09-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"29-09-2025\", year: \"2025\", day_name: \"monday\", quarter: \"3\", week_of_year: \"-40\" },\n  { date: \"30-09-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"3\", week_of_year: \"-40\" },\n  { date: \"01-10-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"4\", week_of_year: \"-40\" },\n  { date: \"02-10-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"4\", week_of_year: \"-40\" },\n  { date: \"03-10-2025\", year: \"2025\", day_name: \"friday\", quarter: \"4\", week_of_year: \"-40\" },\n  { date: \"04-10-2025\", year: \"2025\", day_name: \"SATURDAY\", quarter: \"4\", week_of_year: \"-40\" },\n  { date: \"05-10-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"4\", week_of_year: \"-40\" },\n  { date: \"06-10-2025\", year: \"2025\", day_name: \"monday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"07-10-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"08-10-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"09-10-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"10-10-2025\", year: \"2025\", day_name: \"friday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"11-10-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"12-10-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"4\", week_of_year: \"-41\" },\n  { date: \"13-10-2025\", year: \"2025\", day_name: \"monday\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"14-10-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"15-10-2025\", year: \"2025\", day_name: \"wednesday\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"16-10-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"17-10-2025\", year: \"2025\", day_name: \"FRIDAY\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"18-10-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"19-10-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"4\", week_of_year: \"-42\" },\n  { date: \"20-10-2025\", year: \"2025\", day_name: \"MONDAY\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"21-10-2025\", year: \"2025\", day_name: \"TUESDAY\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"22-10-2025\", year: \"2025\", day_name: \"wednesday\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"23-10-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"24-10-2025\", year: \"2025\", day_name: \"friday\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"25-10-2025\", year: \"2025\", day_name: \"saturday\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"26-10-2025\", year: \"2025\", day_name: \"SUNDAY\", quarter: \"4\", week_of_year: \"-43\" },\n  { date: \"27-10-2025\", year: \"2025\", day_name: \"monday\", quarter: \"4\", week_of_year: \"-44\" },\n  { date: \"28-10-2025\", year: \"2025\", day_name: \"tuesday\", quarter: \"4\", week_of_year: \"-44\" },\n  { date: \"29-10-2025\", year: \"2025\", day_name: \"WEDNESDAY\", quarter: \"4\", week_of_year: \"-44\" },\n  { date: \"30-10-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"4\", week_of_year: \"-44\" },\n  { date: \"31-10-2025\", year: \"2025\", day_name: \"friday\", quarter: \"4\", week_of_year: \"-44\" },\n  { date: \"25-09-2025\", year: \"2025\", day_name: \"THURSDAY\", quarter: \"3\", week_of_year: \"-39\" },\n  { date: \"13-10-2025\", year: \"2025\", day_name: \"sunday\", quarter: \"3\", week_of_year: \"-28\" },\n  { date: \"29-08-2025\", year: \"2025\", day_name: \"thursday\", quarter: \"2\", week_of_year: \"-22\" }\n];\n\nlet dateRow = null;\n\nif (invoiceDate) {\n  // Convert YYYY-MM-DD → DD-MM-YYYY to match dimension table\n  const parts = invoiceDate.split('-');\n  let formattedDate = invoiceDate;\n  if (parts.length === 3 && parts[0].length === 4) {\n    formattedDate = parts[2] + '-' + parts[1] + '-' + parts[0];\n  }\n  dateRow = dateDimension.find(r => r.date === formattedDate) || null;\n}\n\n// If no match found, build a fallback row from the invoice date itself\nif (!dateRow && invoiceDate) {\n  const d = new Date(invoiceDate);\n  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n  const month = d.getMonth() + 1;\n  const quarter = Math.ceil(month / 3).toString();\n  dateRow = {\n    date: invoiceDate,\n    year: String(d.getFullYear()),\n    day_name: dayNames[d.getDay()],\n    quarter: quarter,\n    week_of_year: null\n  };\n}\n\nconst rows = dateRow ? [dateRow] : [];\nconst header = 'date,year,day_name,quarter,week_of_year';\nconst csvLines = rows.map(r => `${r.date},${r.year},${r.day_name},${r.quarter},${r.week_of_year ?? ''}`);\nconst csvStr = header + '\\n' + csvLines.join('\\n');\n\nconst buffer = Buffer.from(csvStr, 'utf8');\nreturn [{\n  json: { filename: 'dates' },\n  binary: { data: { data: buffer.toString('base64'), mimeType: 'text/csv', fileName: 'dates.csv' } }\n}];"
+      },
+      "id": "eaa8881c-3a74-446d-ae5d-febe19731238",
+      "name": "Prep dates CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9488, 2576]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Dates/dates_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10384, 2576],
+      "id": "58df6fde-d5a0-49f0-9519-52e9323a3eeb",
+      "name": "Upload dates to S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data=$input.first().json;\nconst row=data.customerRow;\nif(!row||!row.customer_id)return[];\nreturn [{json:row}];"
+      },
+      "id": "a47af1c0-7085-4724-8719-af7b11e96ed6",
+      "name": "Split customers Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9712, 2000]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1zFbMsTdwphzftmd08G8lkKX6WROIVf7dyaJIgeTtXNo",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zFbMsTdwphzftmd08G8lkKX6WROIVf7dyaJIgeTtXNo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zFbMsTdwphzftmd08G8lkKX6WROIVf7dyaJIgeTtXNo/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "customer_id": "={{ $json.customer_id }}",
+            "phone": "={{ $json.phone }}",
+            "country_code": "={{ $json.country_code }}",
+            "country": "={{ $json.country }}",
+            "state": "={{ $json.state }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "customer_id",
+              "displayName": "customer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "country_code",
+              "displayName": "country_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a42aa895-4902-4425-8eef-3bafea9c28fc",
+      "name": "Append customers to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9936, 2000],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1zFbMsTdwphzftmd08G8lkKX6WROIVf7dyaJIgeTtXNo/edit?gid=0#gid=0",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "0623bb75-2e65-481c-910f-c6a2c5083897",
+      "name": "Download customers Sheet as CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [10160, 2000],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data=$input.first().json;\nreturn (data.productRows||[]).map(row=>({json:row}));"
+      },
+      "id": "886f9e16-b227-4eb0-9818-f8ebea9f441a",
+      "name": "Split products Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9712, 2144]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "11uloyboaHDiCFXVbmeU5L11S3cyhaVdfM-4Tx-9ALtM",
+          "mode": "list",
+          "cachedResultName": "Products",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11uloyboaHDiCFXVbmeU5L11S3cyhaVdfM-4Tx-9ALtM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11uloyboaHDiCFXVbmeU5L11S3cyhaVdfM-4Tx-9ALtM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_id": "={{ $json.product_id }}",
+            "category_code": "={{ $json.category_code }}",
+            "sku": "={{ $json.sku }}",
+            "brand_code": "={{ $json.brand_code }}",
+            "color": "={{ $json.color }}",
+            "size": "={{ $json.size }}",
+            "material": "={{ $json.material }}",
+            "weight_grams": "={{ $json.weight_grams }}",
+            "length_cm": "={{ $json.length_cm }}",
+            "width_cm": "={{ $json.width_cm }}",
+            "height_cm": "={{ $json.height_cm }}",
+            "rating_count": "={{ $json.rating_count }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_code",
+              "displayName": "category_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand_code",
+              "displayName": "brand_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "color",
+              "displayName": "color",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "size",
+              "displayName": "size",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "material",
+              "displayName": "material",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weight_grams",
+              "displayName": "weight_grams",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "length_cm",
+              "displayName": "length_cm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "width_cm",
+              "displayName": "width_cm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "height_cm",
+              "displayName": "height_cm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rating_count",
+              "displayName": "rating_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "190b3a8a-ed6f-4476-94b8-c746b6b9c62e",
+      "name": "Append products to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9936, 2144],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/11uloyboaHDiCFXVbmeU5L11S3cyhaVdfM-4Tx-9ALtM/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "a01ec559-df1a-4478-a51c-397359bc5afd",
+      "name": "Download products Sheet as CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [10160, 2144],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data=$input.first().json;\nreturn (data.categoryRows||[]).map(row=>({json:row}));"
+      },
+      "id": "08913a3d-fbe8-4a46-bef2-4211c06c9d54",
+      "name": "Split categories Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9712, 2288]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1s1_rgVZSXOCLqVr_mOuvQviQT_03gWXIYz1epCudLko",
+          "mode": "list",
+          "cachedResultName": "Category",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1s1_rgVZSXOCLqVr_mOuvQviQT_03gWXIYz1epCudLko/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1s1_rgVZSXOCLqVr_mOuvQviQT_03gWXIYz1epCudLko/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "category_code": "={{ $json.category_code }}",
+            "category_name": "={{ $json.category_name }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "category_code",
+              "displayName": "category_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_name",
+              "displayName": "category_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "112d1892-b2bb-48e0-83ca-1b7043765769",
+      "name": "Append categories to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9936, 2288],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "=https://docs.google.com/spreadsheets/d/1s1_rgVZSXOCLqVr_mOuvQviQT_03gWXIYz1epCudLko/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "4126d407-7bd2-4f58-a422-00b03b353b17",
+      "name": "Download categories Sheet as CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [10160, 2288],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data=$input.first().json;\nreturn (data.brandRows||[]).map(row=>({json:row}));"
+      },
+      "id": "6c411e70-6605-4397-b31b-b1cdd9255254",
+      "name": "Split brands Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9712, 2432]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1h1T05sjK18r50TjS2MmeK7akd2qOJWs0OjeIvWIJP44",
+          "mode": "list",
+          "cachedResultName": "Brands",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1h1T05sjK18r50TjS2MmeK7akd2qOJWs0OjeIvWIJP44/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1h1T05sjK18r50TjS2MmeK7akd2qOJWs0OjeIvWIJP44/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "brand_code": "={{ $json.brand_code }}",
+            "brand_name": "={{ $json.brand_name }}",
+            "category_code": "={{ $json.category_code }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "brand_code",
+              "displayName": "brand_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand_name",
+              "displayName": "brand_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_code",
+              "displayName": "category_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e7718cc6-0185-465e-a424-6806cd0f2c3e",
+      "name": "Append brands to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9936, 2432],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1h1T05sjK18r50TjS2MmeK7akd2qOJWs0OjeIvWIJP44/edit?gid=0#gid=0",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "1f0de78a-f738-4140-b067-c90a5d2462cc",
+      "name": "Download brands Sheet as CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [10160, 2432],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data=$input.first().json;\nconst row=data.dateRow;\nif(!row||!row.date)return[];\nreturn [{json:row}];"
+      },
+      "id": "c8caf711-bd1f-4cf2-b3b7-546a8f91cf8c",
+      "name": "Split dates Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9712, 2576]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1iKyT2pbu0reL_YhNnwDBoF3fdRCyINJUTRWDOvFcRAk",
+          "mode": "list",
+          "cachedResultName": "Dates",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1iKyT2pbu0reL_YhNnwDBoF3fdRCyINJUTRWDOvFcRAk/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1iKyT2pbu0reL_YhNnwDBoF3fdRCyINJUTRWDOvFcRAk/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $json.date }}",
+            "year": "={{ $json.year }}",
+            "day_name": "={{ $json.day_name }}",
+            "quarter": "={{ $json.quarter }}",
+            "week_of_year": "={{ $json.week_of_year }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "year",
+              "displayName": "year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "day_name",
+              "displayName": "day_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quarter",
+              "displayName": "quarter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "week_of_year",
+              "displayName": "week_of_year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5a6fdf9b-4c1c-4dbf-9927-f73ecf89d8bf",
+      "name": "Append dates to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [9936, 2576],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3GrSEhRdbN01QViD",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1iKyT2pbu0reL_YhNnwDBoF3fdRCyINJUTRWDOvFcRAk/edit?gid=0#gid=0",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "5db10e76-abf7-4af2-87b7-415ff733e271",
+      "name": "Download dates Sheet as CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [10160, 2576],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "90s8tIgGM5wano5R",
+          "name": "Google Drive OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "ecommerce-pipeline-data-store",
+        "fileName": "=Orders/order_items_{{ $now.toFormat(\"yyyy-MM-dd\") }}.csv",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [10144, 1712],
+      "id": "61fcfdd6-a27c-45b3-9374-5fd2c85bb435",
+      "name": "Upload to AWS S3",
+      "credentials": {
+        "aws": {
+          "id": "ZStcXSufo09UAotj",
+          "name": "AWS (IAM) account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New File in Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Is PDF or Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PDF or Image?": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Build Groq Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Convert Image to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Image to Base64": {
+      "main": [
+        [
+          {
+            "node": "Google Cloud Vision OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Cloud Vision OCR": {
+      "main": [
+        [
+          {
+            "node": "Parse Vision Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Vision Text": {
+      "main": [
+        [
+          {
+            "node": "Build Groq Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Groq Payload": {
+      "main": [
+        [
+          {
+            "node": "Call Groq for Field Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Groq for Field Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse & Build All Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Build All Tables": {
+      "main": [
+        [
+          {
+            "node": "Build CSV Strings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CSV Strings": {
+      "main": [
+        [
+          {
+            "node": "Split Order Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep customers CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep products CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep categories CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep brands CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep dates CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split customers Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split products Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split categories Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split brands Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split dates Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Order Rows": {
+      "main": [
+        [
+          {
+            "node": "Append Order Rows to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Order Rows to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload to AWS S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload brands to S3": {
+      "main": [[]]
+    },
+    "Split customers Rows": {
+      "main": [
+        [
+          {
+            "node": "Append customers to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append customers to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download customers Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download customers Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload customers to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload customers to S3": {
+      "main": [[]]
+    },
+    "Split products Rows": {
+      "main": [
+        [
+          {
+            "node": "Append products to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append products to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download products Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download products Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload products to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload products to S3": {
+      "main": [[]]
+    },
+    "Split categories Rows": {
+      "main": [
+        [
+          {
+            "node": "Append categories to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append categories to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download categories Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download categories Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload categories to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload categories to S3": {
+      "main": [[]]
+    },
+    "Split brands Rows": {
+      "main": [
+        [
+          {
+            "node": "Append brands to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append brands to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download brands Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download brands Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload brands to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split dates Rows": {
+      "main": [
+        [
+          {
+            "node": "Append dates to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append dates to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Download dates Sheet as CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download dates Sheet as CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload dates to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload dates to S3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b1c0cdc3-d0c0-4f42-a324-750455913f84",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6c56ccda8a268d35d8d5dba99e352e940a2f899c6bb3c728a5dd64bb659a336a"
+  },
+  "id": "S9S3koyR0P5ohlUk",
+  "tags": []
+}
